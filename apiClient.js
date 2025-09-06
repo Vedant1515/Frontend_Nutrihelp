@@ -72,14 +72,37 @@ async function tryRefresh() {
 }
 
 // -------- AUTH --------
+async function tryBoth(primaryPath, secondaryPath, options) {
+  try {
+    return await baseFetch(primaryPath, options);
+  } catch (e) {
+    // If first route is missing (404) or method not allowed (405), try the other
+    if (/(404|405)/.test(e.message)) {
+      return baseFetch(secondaryPath, options);
+    }
+    throw e;
+  }
+}
+
 export const auth = {
-  register(payload) { // {name, email, password}
-    return baseFetch("/auth/register", { method: "POST", json: payload, auth: false });
+  register(payload) {
+    // Try /auth/register, then /signup
+    return tryBoth(
+      "/auth/register",
+      "/signup",
+      { method: "POST", json: payload, auth: false }
+    );
   },
-  login(payload) { // {email, password} or {email, password, mfaCode}
-    return baseFetch("/auth/login", { method: "POST", json: payload, auth: false });
+  login(payload) {
+    // Try /auth/login, then /login
+    return tryBoth(
+      "/auth/login",
+      "/login",
+      { method: "POST", json: payload, auth: false }
+    );
   },
-  mfa(payload) { // {email, mfaCode}
+  mfa(payload) {
+    // Try /login/mfa (as listed), fallback none
     return baseFetch("/login/mfa", { method: "POST", json: payload, auth: false });
   },
   logout() {
@@ -92,6 +115,7 @@ export const auth = {
     return baseFetch("/auth/health", { method: "GET", auth: false });
   },
 };
+
 
 // -------- RECIPES --------
 export const recipes = {
