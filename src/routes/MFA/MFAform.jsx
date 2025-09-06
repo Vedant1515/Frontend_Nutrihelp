@@ -12,16 +12,11 @@ async function verifyMfa({ email, password, code }) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
-    body: JSON.stringify({
-      email,
-      password,
-      mfa_token: code, // backend expects mfa_token per your example
-    }),
+    body: JSON.stringify({ email, password, mfa_token: code }),
   });
 
   let data = null;
   try { data = await res.json(); } catch {}
-
   if (!res.ok) {
     const msg = (data && (data.error || data.message)) || "Failed to verify MFA token";
     throw new Error(msg);
@@ -34,16 +29,14 @@ const MFAform = () => {
   const [error, setError] = useState("");
   const [resendStatus, setResendStatus] = useState("");
   const [countdown, setCountdown] = useState(0);
-
   const inputsRef = useRef([]);
+
   const navigate = useNavigate();
   const { setCurrentUser } = useContext(UserContext);
-
   const location = useLocation();
   const { email, password } = location.state || {};
 
   useEffect(() => {
-    // autofocus first cell
     inputsRef.current[0]?.focus();
   }, []);
 
@@ -52,18 +45,14 @@ const MFAform = () => {
     const next = [...digits];
     next[idx] = v;
     setDigits(next);
-
-    if (v && idx < next.length - 1) {
-      inputsRef.current[idx + 1]?.focus();
-    }
+    if (v && idx < next.length - 1) inputsRef.current[idx + 1]?.focus();
   };
 
   const onKeyDown = (idx, e) => {
     if (e.key === "Backspace" && !digits[idx] && idx > 0) {
-      const prev = idx - 1;
-      inputsRef.current[prev]?.focus();
+      inputsRef.current[idx - 1]?.focus();
       const next = [...digits];
-      next[prev] = "";
+      next[idx - 1] = "";
       setDigits(next);
       e.preventDefault();
     }
@@ -98,15 +87,14 @@ const MFAform = () => {
     try {
       const data = await verifyMfa({ email, password, code });
 
-      // optional: store tokens if your API returns them
       if (data.accessToken || data.token) {
         localStorage.setItem("nh_access", data.accessToken || data.token);
       }
       if (data.refreshToken) {
         localStorage.setItem("nh_refresh", data.refreshToken);
       }
-
       if (data.user) setCurrentUser(data.user);
+
       alert("MFA verification successful!");
       navigate("/");
     } catch (err) {
@@ -116,7 +104,7 @@ const MFAform = () => {
 
   const handleResendCode = async () => {
     if (countdown > 0) return;
-    // If you later add a resend endpoint, call it here (e.g., `${API_BASE}/login/mfa/resend`)
+    // If you expose a resend endpoint later, call it here
     setResendStatus("Code resent to your email.");
     setCountdown(30);
     setTimeout(() => setResendStatus(""), 2500);
