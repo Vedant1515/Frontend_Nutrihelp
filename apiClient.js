@@ -3,7 +3,7 @@
 
 const API_BASE =
   (window.__ENV__ && window.__ENV__.API_BASE) ||
-  "https://nutrihelp-api-ved.onrender.com";
+  "https://nutrihelp-api-ved.onrender.com/api";
 
 // Helpers to store tokens (adjust if you use cookies instead)
 const TOKENS = {
