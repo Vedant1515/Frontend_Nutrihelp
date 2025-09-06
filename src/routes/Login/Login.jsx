@@ -13,7 +13,7 @@ const API_BASE =
   (window.__ENV__ && window.__ENV__.API_BASE) ||
   "https://nutrihelp-api-ved.onrender.com/api";
 
-// Try /auth/login first, then /login (your API lists both in docs)
+// Try /auth/login first, then /login if 404/405 (your API lists both)
 async function apiLogin({ email, password }) {
   const opts = {
     method: "POST",
@@ -22,22 +22,16 @@ async function apiLogin({ email, password }) {
     body: JSON.stringify({ email, password }),
   };
 
-  // 1) /auth/login
   let res = await fetch(`${API_BASE}/auth/login`, opts);
-  if (res.ok) return res.json();
-
-  // 2) fallback /login (if server uses that route)
   if (res.status === 404 || res.status === 405) {
     res = await fetch(`${API_BASE}/login`, opts);
-    if (res.ok) return res.json();
   }
 
-  // Throw detailed error
-  let msg = "Failed to sign in.";
-  try {
-    const data = await res.json();
-    msg = data?.error || data?.message || msg;
-  } catch {}
+  let data = null;
+  try { data = await res.json(); } catch {}
+  if (res.ok || res.status === 202) return { status: res.status, data };
+
+  const msg = (data && (data.error || data.message)) || `Login failed (${res.status})`;
   throw new Error(msg);
 }
 
@@ -67,57 +61,36 @@ const Login = () => {
     }
 
     try {
-      const data = await apiLogin({ email, password });
+      const { status, data } = await apiLogin({ email, password });
 
-      // Optional: store tokens if your API returns them
-      if (data.accessToken || data.token) {
+      // If backend requires MFA, it should return 202 or { mfaRequired: true }
+      if (status === 202 || data?.mfaRequired) {
+        toast.info("MFA required. Check your email for the 6-digit code.");
+        navigate("/MFAform", { state: { email, password } });
+        return;
+      }
+
+      // Normal login
+      const expirationTimeInMillis = isChecked ? 3600000 : 0;
+      // store token if backend returns one
+      if (data?.token || data?.accessToken) {
         localStorage.setItem("nh_access", data.accessToken || data.token);
       }
-      if (data.refreshToken) {
+      if (data?.refreshToken) {
         localStorage.setItem("nh_refresh", data.refreshToken);
       }
-
-      // Persist user (your context’s API)
-      const expirationTimeInMillis = isChecked ? 3600000 : 0; // 1h if checked, else session
-      if (data.user) {
+      if (data?.user) {
         setCurrentUser(data.user, expirationTimeInMillis);
+        localStorage.setItem("nh_user", JSON.stringify(data.user));
       }
 
-      // Toast
-      toast.success(
-        "💧 Welcome back! Don’t forget to check your meal plan & track your water intake!",
-        {
-          position: "top-right",
-          autoClose: false,
-          closeOnClick: true,
-          pauseOnHover: true,
-          draggable: true,
-          hideProgressBar: false,
-          theme: "colored",
-          style: {
-            fontSize: "1.1rem",
-            fontWeight: "bold",
-            padding: "1.2rem",
-            borderRadius: "10px",
-            boxShadow: "0px 4px 12px rgba(0,0,0,0.1)",
-            backgroundColor: "#d1f0ff",
-            color: "#0d47a1",
-          },
-        }
-      );
-
-      // If your flow does MFA next, keep your route:
-      setTimeout(() => {
-        navigate("/MFAform", { state: { email, password } });
-      }, 300);
+      toast.success("Signed in successfully!");
+      navigate("/"); // go to your app's home/dashboard
     } catch (err) {
       console.error("Error signing in:", err);
       setError(err.message || "Failed to sign in. Please try again.");
     }
   };
-
-  const handleToggleCheckbox = () => setIsChecked((v) => !v);
-  const handleForgotPasswordClick = () => navigate("/forgotPassword");
 
   return (
     <FramerClient>
@@ -142,7 +115,7 @@ const Login = () => {
             <input
               className={`border-1 ${darkMode && "bg-gray-700 text-white font-semibold"}`}
               name="email"
-              type="text"
+              type="email"
               placeholder="Enter Your Email"
               onChange={handleChange}
               value={email}
@@ -174,15 +147,17 @@ const Login = () => {
               <div className="keep-logged-in ">
                 <div
                   className={`checkbox-div ${isChecked ? "checked" : ""}`}
-                  onClick={handleToggleCheckbox}
+                  onClick={() => setIsChecked((v) => !v)}
                 >
                   <span className="checkbox-indicator"></span>
                 </div>
-                <label htmlFor="keepLoggedIn" className="ml-2">Keep me logged in</label>
+                <label htmlFor="keepLoggedIn" className="ml-2">
+                  Keep me logged in
+                </label>
               </div>
               <div
                 className={`forgot-password ${darkMode ? "text-purple-300" : "text-purple-800"}`}
-                onClick={handleForgotPasswordClick}
+                onClick={() => navigate("/forgotPassword")}
               >
                 Forgot password?
               </div>
@@ -209,10 +184,12 @@ const Login = () => {
                   : "bg-green-500 text-gray-800 hover:bg-green-700 hover:text-white"
               }`}
               onClick={handleSignIn}
+              type="button"
             >
               <img
                 src="https://static.vecteezy.com/system/resources/previews/022/613/027/non_2x/google-icon-logo-symbol-free-png.png"
                 className="w-[25px]"
+                alt="Google"
               />
               Sign In With Google
             </button>
@@ -231,7 +208,7 @@ const Login = () => {
           <div className="flex flex-col justify-center items-center m-auto">
             <img
               src="https://cdni.iconscout.com/illustration/premium/thumb/woman-watching-food-menu-while-checkout-order-using-application-illustration-download-in-svg-png-gif-file-formats--online-service-mobile-app-pack-e-commerce-shopping-illustrations-10107922.png"
-              alt="Nutrihelp Logo 2"
+              alt="Nutrihelp Illustration"
             />
           </div>
         </div>
