@@ -1,39 +1,16 @@
+import { Auth } from "@supabase/auth-ui-react";
+import { ThemeSupa } from "@supabase/auth-ui-shared";
+import { supabase } from '../../supabaseClient';
 import { UserIcon } from "lucide-react";
 import React, { useContext, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { toast } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
+import { toast } from "react-toastify"; // Toast import
+import "react-toastify/dist/ReactToastify.css"; // Toast CSS
 import { UserContext } from "../../context/user.context";
 import { useDarkMode } from "../DarkModeToggle/DarkModeContext";
 import "./Login.css";
 import FramerClient from "../../components/framer-client";
 import NutrihelpLogo from "./Nutrihelp_Logo.PNG";
-
-const API_BASE =
-  (window.__ENV__ && window.__ENV__.API_BASE) ||
-  "https://nutrihelp-api-ved.onrender.com/api";
-
-// Try /auth/login first, then /login if 404/405 (your API lists both)
-async function apiLogin({ email, password }) {
-  const opts = {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify({ email, password }),
-  };
-
-  let res = await fetch(`${API_BASE}/auth/login`, opts);
-  if (res.status === 404 || res.status === 405) {
-    res = await fetch(`${API_BASE}/login`, opts);
-  }
-
-  let data = null;
-  try { data = await res.json(); } catch {}
-  if (res.ok || res.status === 202) return { status: res.status, data };
-
-  const msg = (data && (data.error || data.message)) || `Login failed (${res.status})`;
-  throw new Error(msg);
-}
 
 const Login = () => {
   const navigate = useNavigate();
@@ -46,50 +23,88 @@ const Login = () => {
 
   const handleChange = (event) => {
     const { name, value } = event.target;
-    setContact((prev) => ({ ...prev, [name]: value }));
+    setContact((prevValue) => ({ ...prevValue, [name]: value }));
   };
 
   const { email, password } = contact;
 
   const handleSignIn = async (e) => {
     e.preventDefault();
-    setError("");
-
-    if (!email || !password) {
-      setError("Please enter email and password.");
-      return;
-    }
-
     try {
-      const { status, data } = await apiLogin({ email, password });
+      const response = await fetch("http://localhost:80/api/login", {
+        method: "POST",
+        body: JSON.stringify({ email, password }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
 
-      // If backend requires MFA, it should return 202 or { mfaRequired: true }
-      if (status === 202 || data?.mfaRequired) {
-        toast.info("MFA required. Check your email for the 6-digit code.");
-        navigate("/MFAform", { state: { email, password } });
-        return;
-      }
-
-      // Normal login
-      const expirationTimeInMillis = isChecked ? 3600000 : 0;
-      // store token if backend returns one
-      if (data?.token || data?.accessToken) {
-        localStorage.setItem("nh_access", data.accessToken || data.token);
-      }
-      if (data?.refreshToken) {
-        localStorage.setItem("nh_refresh", data.refreshToken);
-      }
-      if (data?.user) {
+      if (response.ok) {
+        const data = await response.json();
+        const expirationTimeInMillis = isChecked ? 3600000 : 0;
         setCurrentUser(data.user, expirationTimeInMillis);
-        localStorage.setItem("nh_user", JSON.stringify(data.user));
-      }
 
-      toast.success("Signed in successfully!");
-      navigate("/"); // go to your app's home/dashboard
-    } catch (err) {
-      console.error("Error signing in:", err);
-      setError(err.message || "Failed to sign in. Please try again.");
+        // Toast message
+        toast.success(
+          "💧 Welcome back! Don’t forget to check your meal plan & track your water intake!",
+          {
+            position: "top-right",
+            autoClose: false, // stays until dismissed
+            closeOnClick: true,
+            pauseOnHover: true,
+            draggable: true,
+            hideProgressBar: false,
+            theme: "colored", // makes it vibrant
+            style: {
+              fontSize: "1.1rem",
+              fontWeight: "bold",
+              padding: "1.2rem",
+              borderRadius: "10px",
+              boxShadow: "0px 4px 12px rgba(0,0,0,0.1)",
+              backgroundColor: "#d1f0ff", // optional custom color
+              color: "#0d47a1",
+            },
+          }
+        );
+
+        // Delay navigation so toast shows first
+        setTimeout(() => {
+          navigate("/MFAform", { state: { email, password } });
+        }, 300);
+      } else {
+        const data = await response.json();
+        setError(
+          data.error ||
+            "Failed to sign in. Please check your credentials and try again."
+        );
+      }
+    } catch (error) {
+      console.error("Error signing in:", error.message);
+      setError("Failed to sign in. An error occurred.");
     }
+  };
+
+  const handleGoogleSignIn = async () => {
+    try {
+      await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback?next=/home`,
+          queryParams: { access_type: "offline", prompt: "consent" },
+        },
+      });
+    } catch (err) {
+      console.error("Google sign-in error:", err);
+      toast.error("Google sign-in failed. Please try again.");
+    }
+  };
+
+  const handleToggleCheckbox = () => {
+    setIsChecked(!isChecked);
+  };
+
+  const handleForgotPasswordClick = () => {
+    navigate("/forgotPassword");
   };
 
   return (
@@ -102,30 +117,37 @@ const Login = () => {
               alt="Nutrihelp Logo"
               className="rounded-xl w-[500px] mx-auto"
             />
-            <h2 className={`font-bold text-4xl mt-4 ${darkMode && "text-white"}`}>
+            <h2
+              className={`font-bold text-4xl mt-4 ${darkMode && "text-white"}`}
+            >
               LOG IN
             </h2>
             <p className="text-lg text-center text-gray-500">
               Enter your email and password to sign in!
             </p>
-
             {error && <p className="error-message">{error}</p>}
-
-            <label htmlFor="email" className="input-label">Email*</label>
+            <label htmlFor="email" className="input-label">
+              Email*
+            </label>
             <input
-              className={`border-1 ${darkMode && "bg-gray-700 text-white font-semibold"}`}
+              className={`border-1 ${
+                darkMode && "bg-gray-700 text-white font-semibold"
+              }`}
               name="email"
-              type="email"
+              type="text"
               placeholder="Enter Your Email"
               onChange={handleChange}
               value={email}
             />
-
             <div>
-              <label htmlFor="password" className="input-label">Password*</label>
+              <label htmlFor="password" className="input-label">
+                Password*
+              </label>
               <div className="password-field">
                 <input
-                  className={`border-1 ${darkMode && "bg-gray-700 text-white font-semibold"}`}
+                  className={`border-1 ${
+                    darkMode && "bg-gray-700 text-white font-semibold"
+                  }`}
                   id="password"
                   name="password"
                   type={showPassword ? "text" : "password"}
@@ -136,7 +158,7 @@ const Login = () => {
                 <span
                   className="eye-icon tts-ignore cursor-pointer"
                   aria-hidden="true"
-                  onClick={() => setShowPassword((v) => !v)}
+                  onClick={() => setShowPassword(!showPassword)}
                 >
                   {showPassword ? "🙈" : "👁️"}
                 </span>
@@ -147,7 +169,7 @@ const Login = () => {
               <div className="keep-logged-in ">
                 <div
                   className={`checkbox-div ${isChecked ? "checked" : ""}`}
-                  onClick={() => setIsChecked((v) => !v)}
+                  onClick={handleToggleCheckbox}
                 >
                   <span className="checkbox-indicator"></span>
                 </div>
@@ -156,13 +178,14 @@ const Login = () => {
                 </label>
               </div>
               <div
-                className={`forgot-password ${darkMode ? "text-purple-300" : "text-purple-800"}`}
-                onClick={() => navigate("/forgotPassword")}
+                className={`forgot-password ${
+                  darkMode ? "text-purple-300" : "text-purple-800"
+                }`}
+                onClick={handleForgotPasswordClick}
               >
                 Forgot password?
               </div>
             </div>
-
             <button
               className={`w-full rounded-full mb-6 text-2xl font-bold flex justify-center gap-3 items-center ${
                 darkMode
@@ -183,13 +206,11 @@ const Login = () => {
                   ? "bg-green-700 hover:bg-green-500"
                   : "bg-green-500 text-gray-800 hover:bg-green-700 hover:text-white"
               }`}
-              onClick={handleSignIn}
-              type="button"
+              onClick={handleGoogleSignIn}
             >
               <img
                 src="https://static.vecteezy.com/system/resources/previews/022/613/027/non_2x/google-icon-logo-symbol-free-png.png"
                 className="w-[25px]"
-                alt="Google"
               />
               Sign In With Google
             </button>
@@ -198,17 +219,19 @@ const Login = () => {
               Not registered yet?{" "}
               <Link
                 to="/signUp"
-                className={`${darkMode ? "text-purple-300" : "text-purple-800"}`}
+                className={`${
+                  darkMode ? "text-purple-300" : "text-purple-800"
+                }`}
               >
                 Create an Account
               </Link>
             </p>
           </div>
-
           <div className="flex flex-col justify-center items-center m-auto">
             <img
               src="https://cdni.iconscout.com/illustration/premium/thumb/woman-watching-food-menu-while-checkout-order-using-application-illustration-download-in-svg-png-gif-file-formats--online-service-mobile-app-pack-e-commerce-shopping-illustrations-10107922.png"
-              alt="Nutrihelp Illustration"
+              alt="Nutrihelp Logo 2"
+              className=""
             />
           </div>
         </div>
