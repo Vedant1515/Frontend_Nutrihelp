@@ -12,10 +12,9 @@ import { useDarkMode } from "../DarkModeToggle/DarkModeContext";
 import "./Login.css";
 import FramerClient from "../../components/framer-client";
 import NutrihelpLogo from "./Nutrihelp_Logo.PNG";
+
+// ✅ Single source of truth
 import api, { auth as apiAuth, setTokens } from "../../apiClient";
-
-
-
 
 const Login = () => {
   const navigate = useNavigate();
@@ -38,17 +37,17 @@ const Login = () => {
     setError("");
 
     try {
-      // ✅ Route through apiClient which knows API_BASE and handles tokens/refresh
+      // Route through apiClient which knows API_BASE and handles tokens/refresh
       const data = await apiAuth.login({ email, password });
 
-      // Store tokens if returned (apiClient handles both token shapes)
+      // Store tokens if returned (ok if using httpOnly cookies)
       try {
         setTokens({
           accessToken: data?.accessToken || data?.token,
           refreshToken: data?.refreshToken,
         });
       } catch {
-        // no tokens in body or using httpOnly cookies, which is fine
+        /* no tokens in body or using httpOnly cookies, which is fine */
       }
 
       // Update your app user context
@@ -57,34 +56,30 @@ const Login = () => {
         data?.user || data?.profile || data?.data || { email }; // fallback if API returns minimal user
       setCurrentUser(userPayload, expirationTimeInMillis);
 
-      toast.success(
-        "💧 Welcome back! Do not forget to check your meal plan and track your water intake!",
-        {
-          position: "top-right",
-          autoClose: false,
-          closeOnClick: true,
-          pauseOnHover: true,
-          draggable: true,
-          hideProgressBar: false,
-          theme: "colored",
-          style: {
-            fontSize: "1.1rem",
-            fontWeight: "bold",
-            padding: "1.2rem",
-            borderRadius: "10px",
-            boxShadow: "0px 4px 12px rgba(0,0,0,0.1)",
-            backgroundColor: "#d1f0ff",
-            color: "#0d47a1",
-          },
-        }
-      );
+      toast.success("💧 Welcome back! Don’t forget to check your meal plan & track your water intake!", {
+        position: "top-right",
+        autoClose: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+        hideProgressBar: false,
+        theme: "colored",
+        style: {
+          fontSize: "1.1rem",
+          fontWeight: "bold",
+          padding: "1.2rem",
+          borderRadius: "10px",
+          boxShadow: "0px 4px 12px rgba(0,0,0,0.1)",
+          backgroundColor: "#d1f0ff",
+          color: "#0d47a1",
+        },
+      });
 
-      // Keep your existing MFA navigation
+      // ⛔ BYPASS MFA: go straight home
       setTimeout(() => {
-        navigate("/MFAform", { state: { email, password } });
+        navigate("/");
       }, 300);
     } catch (err) {
-      // apiClient standardizes error messages when possible
       const msg =
         err?.message ||
         "Failed to sign in. Please check your credentials and try again.";
@@ -208,6 +203,7 @@ const Login = () => {
                   : "bg-green-500 text-gray-800 hover:bg-green-700 hover:text-white"
               }`}
               onClick={handleGoogleSignIn}
+              type="button"
             >
               <img
                 src="https://static.vecteezy.com/system/resources/previews/022/613/027/non_2x/google-icon-logo-symbol-free-png.png"
